@@ -1,0 +1,36 @@
+# =============================================================================
+# H2 内存库 profile —— 不装 MySQL 也能把项目跑起来
+#
+# 用途：
+#   1. 面试官 / 同学拿到代码想快速看效果，不必装 MySQL
+#   2. 本地跑集成测试，每次启动都是干净的数据库
+#
+# 启动方式：./mvnw spring-boot:run -Dspring-boot.run.profiles=h2
+# 注意：内存库，进程退出后数据全部丢失，不适合当作正式运行环境
+# =============================================================================
+
+spring:
+  datasource:
+    driver-class-name: org.h2.Driver
+    # MODE=MySQL          开启 MySQL 语法兼容（反引号、AUTO_INCREMENT、NOW() 等）
+    # DATABASE_TO_LOWER   标识符统一小写，和 MySQL 的行为保持一致
+    # NON_KEYWORDS=USER   允许把表命名为 user
+    url: jdbc:h2:mem:campus_market;MODE=MySQL;DATABASE_TO_LOWER=TRUE;NON_KEYWORDS=USER;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+    hikari:
+      maximum-pool-size: 8
+      minimum-idle: 1
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema-h2.sql
+
+mybatis-plus:
+  configuration:
+    # 关掉 SQL 打印，避免刷屏（想看 SQL 就换成 StdOutImpl）
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+logging:
+  level:
+    com.campus.market: info

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>个人中心 · 校园二手交易平台</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main class="container">
+    <div id="profileCard" class="card card-pad" style="margin-bottom:20px"></div>
+
+    <div class="tabs" id="tabs"></div>
+    <div id="panel"></div>
+</main>
+
+<script src="js/common.js"></script>
+<script src="js/api.js"></script>
+<script>
+    if (!requireLogin()) { /* 已跳转 */ }
+
+    const TABS = [
+        { key: 'profile', label: '个人资料' },
+        { key: 'products', label: '我的商品' },
+        { key: 'bought', label: '我买到的' },
+        { key: 'sold', label: '我卖出的' },
+        { key: 'favorites', label: '我的收藏' },
+        { key: 'credit', label: '信用分' }
+    ];
+
+    const navKeyMap = {
+        profile: 'products',
+        products: 'products',
+        bought: 'orders',
+        sold: 'orders',
+        favorites: 'favorites',
+        credit: 'products'
+    };
+
+    let currentTab = queryParam('tab', 'profile');
+    if (!TABS.some(t => t.key === currentTab)) currentTab = 'profile';
+
+    renderNav(navKeyMap[currentTab] || 'products');
+
+    /* ------------------------------ 顶部资料卡 ------------------------------ */
+
+    async function loadProfileCard() {
+        try {
+            const { data } = await UserApi.me();
+            Auth.updateUser(data);
+
+            const avatar = data.avatar
+                ? '<img src="' + escapeHtml(data.avatar) + '" alt="">'
+                : escapeHtml(firstChar(data.nickname));
+
+            $('#profileCard').innerHTML =
+                '<div class="row" style="gap:16px;flex-wrap:wrap">'
+                + '<span class="avatar avatar-lg">' + avatar + '</span>'
+                + '<div style="flex:1;min-width:180px">'
+                + '<div class="row" style="gap:8px">'
+                + '<span style="font-size:17px;font-weight:600">' + escapeHtml(data.nickname) + '</span>'
+                + (data.role === 'ADMIN' ? '<span class="badge badge-blue">管理员</span>' : '')
+                + '</div>'
+                + '<div class="fs-13 text-2 mt-8">@' + escapeHtml(data.username)
+                + (data.campus ? ' · ' + escapeHtml(data.campus) : '')
+                + ' · 注册于 ' + escapeHtml(formatTime(data.createTime)) + '</div>'
+                + '</div>'
+                + '<div style="text-align:right">'
+                + '<div class="fs-12 text-3">信用分</div>'
+                + '<div style="font-size:26px;font-weight:600;color:var(--primary-dark);line-height:1.2">'
+                + (data.creditScore == null ? '—' : data.creditScore) + '</div>'
+                + '</div></div>';
+        } catch (e) { /* ignore */ }
+    }
+
+    /* ------------------------------ Tab 切换 ------------------------------ */
+
+    function renderTabs() {
+        $('#tabs').innerHTML = TABS.map(t =>
+            '<div class="tab' + (t.key === currentTab ? ' active' : '') + '" data-key="'
+            + t.key + '">' + t.label + '</div>').join('');
+
+        $$('#tabs .tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                currentTab = tab.dataset.key;
+                history.replaceState(null, '', 'center.html?tab=' + currentTab);
+                renderTabs();
+                renderPanel();
+            });
+        });
+    }
+
+    function renderPanel() {
+        const renderers = {
+            profile: renderProfile,
+            products: renderMyProducts,
+            bought: () => renderOrders('bought'),
+            sold: () => renderOrders('sold'),
+            favorites: renderFavorites,
+            credit: renderCredit
+        };
+        renderers[currentTab]();
+    }
+
+    /* ------------------------------ 个人资料 ------------------------------ */
+
+    async function renderProfile() {
+        const panel = $('#panel');
+        panel.innerHTML = loadingHtml();
+        const { data } = await UserApi.me();
+
+        panel.innerHTML = '<div class="card card-pad" style="max-width:520px">'
+            + '<div class="card-title" style="margin-bottom:16px">编辑资料</div>'
+            + '<div class="field"><label class="label">昵称</label>'
+            + '<input class="input" id="pfNickname" maxlength="16" value="' + escapeHtml(data.nickname) + '"></div>'
+            + '<div class="field"><label class="label">校区</label>'
+            + '<input class="input" id="pfCampus" maxlength="64" value="' + escapeHtml(data.campus || '') + '"></div>'
+            + '<div class="field"><label class="label">手机号</label>'
+            + '<input class="input" id="pfPhone" maxlength="11" value="' + escapeHtml(data.phone || '') + '">'
+            + '<span class="hint">买家下单后会看到，建议填写常用的联系方式</span></div>'
+            + '<div class="field"><label class="label">头像地址</label>'
+            + '<input class="input" id="pfAvatar" value="' + escapeHtml(data.avatar || '') + '" '
+            + 'placeholder="可粘贴图片链接，或留空使用昵称首字"></div>'
+            + '<div class="row mt-16"><button class="btn btn-primary" id="saveProfile">保存修改</button></div>'
+            + '</div>';
+
+        $('#saveProfile').addEventListener('click', async e => {
+            e.target.disabled = true;
+            try {
+                const { data: updated, message } = await UserApi.updateProfile({
+                    nickname: $('#pfNickname').value.trim(),
+                    campus: $('#pfCampus').value.trim(),
+                    phone: $('#pfPhone').value.trim(),
+                    avatar: $('#pfAvatar').value.trim()
+                });
+                Auth.updateUser(updated);
+                toast(message || '已保存', 'success');
+                loadProfileCard();
+                renderNavRefresh();
+            } catch (err) { /* ignore */ } finally {
+                e.target.disabled = false;
+            }
+        });
+    }
+
+    /* ------------------------------ 我的商品 ------------------------------ */
+
+    async function renderMyProducts() {
+        const panel = $('#panel');
+        panel.innerHTML = loadingHtml();
+
+        const load = async page => {
+            const { data } = await ProductApi.mine({ page: page || 1, size: 10 });
+            if (!data.records.length) {
+                panel.innerHTML = '<div class="card">' + emptyHtml('还没有发布过闲置', '点右上角「发布闲置」开始吧') + '</div>';
+                return;
+            }
+            panel.innerHTML = '<div class="card">' + data.records.map(myProductRow).join('') + '</div>'
+                + '<div class="pagination" id="pager"></div>';
+            renderPagination('#pager', data, p => load(p));
+
+            $$('[data-product-action]').forEach(btn => {
+                btn.addEventListener('click', () => handleProductAction(btn.dataset.productAction, btn.dataset.id, () => load(data.page)));
+            });
+        };
+        load(1);
+    }
+
+    function myProductRow(product) {
+        const cover = product.cover
+            ? '<div class="order-cover"><img src="' + escapeHtml(product.cover) + '" alt=""></div>'
+            : '<div class="order-cover" style="' + coverStyle(product.id) + '">'
+                + escapeHtml(firstChar(product.title)) + '</div>';
+
+        const actions = [];
+        if (product.status !== 'LOCKED' && product.status !== 'SOLD') {
+            actions.push('<a class="btn btn-sm" href="publish.html?id=' + product.id + '">编辑</a>');
+        }
+        if (product.status === 'ON_SALE') {
+            actions.push('<button class="btn btn-sm" data-product-action="off" data-id="' + product.id + '">下架</button>');
+        }
+        if (product.status === 'OFF_SHELF') {
+            actions.push('<button class="btn btn-sm" data-product-action="on" data-id="' + product.id + '">上架</button>');
+        }
+        if (product.status !== 'LOCKED') {
+            actions.push('<button class="btn btn-sm btn-danger" data-product-action="remove" data-id="' + product.id + '">删除</button>');
+        }
+
+        return '<div class="order-item">'
+            + cover
+            + '<div class="order-main">'
+            + '<div class="row" style="gap:8px;flex-wrap:wrap">'
+            + '<a href="detail.html?id=' + product.id + '" class="fw-500 ellipsis" style="max-width:100%">'
+            + escapeHtml(product.title) + '</a>' + productStatusBadge(product.status) + '</div>'
+            + '<div class="row" style="gap:10px;align-items:baseline">'
+            + '<span class="price" style="font-size:16px">' + formatMoney(product.price) + '</span>'
+            + '<span class="fs-12 text-3">' + escapeHtml(product.categoryName || '') + '</span></div>'
+            + '<div class="fs-12 text-3">' + (product.viewCount || 0) + ' 浏览 · '
+            + (product.favoriteCount || 0) + ' 收藏 · ' + escapeHtml(formatTime(product.createTime)) + '</div>'
+            + '</div>'
+            + '<div class="order-actions">' + actions.join('') + '</div>'
+            + '</div>';
+    }
+
+    async function handleProductAction(action, id, reload) {
+        try {
+            if (action === 'off') {
+                const { message } = await ProductApi.offShelf(id);
+                toast(message, 'success');
+                reload();
+            } else if (action === 'on') {
+                const { message } = await ProductApi.onShelf(id);
+                toast(message, 'success');
+                reload();
+            } else if (action === 'remove') {
+                confirmDialog('删除商品', '删除后无法恢复，确定继续吗？', async () => {
+                    const { message } = await ProductApi.remove(id);
+                    toast(message, 'success');
+                    reload();
+                });
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    /* ------------------------------ 订单 ------------------------------ */
+
+    async function renderOrders(type) {
+        const panel = $('#panel');
+        panel.innerHTML = loadingHtml();
+
+        const load = async page => {
+            const { data } = type === 'bought'
+                ? await OrderApi.bought(page || 1, 10)
+                : await OrderApi.sold(page || 1, 10);
+
+            if (!data.records.length) {
+                panel.innerHTML = '<div class="card">'
+                    + emptyHtml(type === 'bought' ? '还没有买过东西' : '还没有卖出过东西',
+                        type === 'bought' ? '去市场逛逛吧' : '把闲置发出来试试')
+                    + '</div>';
+                return;
+            }
+
+            panel.innerHTML = '<div class="card">' + data.records.map(orderRow).join('') + '</div>'
+                + '<div class="pagination" id="pager"></div>';
+            renderPagination('#pager', data, p => load(p));
+
+            $$('[data-order-action]').forEach(btn => {
+                btn.addEventListener('click', () => handleOrderAction(
+                    btn.dataset.orderAction, btn.dataset.id, btn.dataset.label, () => load(data.page)));
+            });
+        };
+        load(1);
+    }
+
+    function orderRow(order) {
+        const cover = order.productCover
+            ? '<div class="order-cover"><img src="' + escapeHtml(order.productCover) + '" alt=""></div>'
+            : '<div class="order-cover" style="' + coverStyle(order.productId) + '">'
+                + escapeHtml(firstChar(order.productTitle)) + '</div>';
+
+        const counterpart = order.viewerRole === 'BUYER'
+            ? '卖家：' + escapeHtml(order.sellerNickname || '—')
+            : '买家：' + escapeHtml(order.buyerNickname || '—');
+
+        const actions = (order.actions || []).map(a =>
+            '<button class="btn btn-sm' + (a.primary ? ' btn-primary' : '')
+            + '" data-order-action="' + a.key + '" data-id="' + order.id + '" data-label="'
+            + escapeHtml(a.label) + '">' + escapeHtml(a.label) + '</button>').join('');
+
+        const cancelInfo = order.status === 'CANCELLED' && order.cancelReason
+            ? '<div class="fs-12 text-3">取消原因：' + escapeHtml(order.cancelReason) + '</div>'
+            : '';
+
+        return '<div class="order-item">'
+            + cover
+            + '<div class="order-main">'
+            + '<div class="row" style="gap:8px;flex-wrap:wrap">'
+            + '<a href="detail.html?id=' + order.productId + '" class="fw-500 ellipsis" style="max-width:100%">'
+            + escapeHtml(order.productTitle) + '</a>'
+            + orderStatusBadge(order.status) + '</div>'
+            + '<div class="row" style="gap:10px;align-items:baseline">'
+            + '<span class="price" style="font-size:16px">' + formatMoney(order.amount) + '</span>'
+            + '<span class="fs-12 text-3">' + counterpart + '</span></div>'
+            + '<div class="order-no">订单号 ' + escapeHtml(order.orderNo) + '</div>'
+            + '<div class="fs-12 text-3">下单于 ' + escapeHtml(formatTime(order.createTime))
+            + (order.remark ? ' · 留言：' + escapeHtml(order.remark) : '') + '</div>'
+            + cancelInfo
+            + '</div>'
+            + '<div class="order-actions">' + actions + '</div>'
+            + '</div>';
+    }
+
+    async function handleOrderAction(action, id, label, reload) {
+        try {
+            if (action === 'confirm') {
+                const { message } = await OrderApi.confirm(id);
+                toast(message, 'success');
+                reload();
+            } else if (action === 'finish') {
+                confirmDialog('确认完成交易', '确认后商品将标记为已售出，双方信用分各 +2。', async () => {
+                    const { message } = await OrderApi.finish(id);
+                    toast(message, 'success');
+                    reload();
+                    loadProfileCard();
+                }, '确认完成');
+            } else if (action === 'cancel') {
+                openModal({
+                    title: '取消订单',
+                    bodyHtml: '<div class="field" style="margin-bottom:0">'
+                        + '<label class="label">取消原因</label>'
+                        + '<textarea class="textarea" id="cancelReason" style="min-height:70px" '
+                        + 'placeholder="例如：临时不需要了 / 商品有瑕疵"></textarea>'
+                        + '<span class="hint">卖家确认后买家再取消会扣 3 分信用分，请谨慎操作</span></div>',
+                    confirmText: '确认取消',
+                    onConfirm: async () => {
+                        const reason = ($('#cancelReason') || {}).value || '';
+                        const { message } = await OrderApi.cancel(id, reason);
+                        toast(message, 'success');
+                        reload();
+                        loadProfileCard();
+                    }
+                });
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    /* ------------------------------ 收藏 ------------------------------ */
+
+    async function renderFavorites() {
+        const panel = $('#panel');
+        panel.innerHTML = loadingHtml();
+
+        const load = async page => {
+            const { data } = await FavoriteApi.mine(page || 1, 12);
+            if (!data.records.length) {
+                panel.innerHTML = '<div class="card">' + emptyHtml('还没有收藏任何商品', '在商品详情页点「收藏」即可') + '</div>';
+                return;
+            }
+
+            panel.innerHTML = '<div class="grid">' + data.records.map(product => {
+                const tag = product.status !== 'ON_SALE'
+                    ? '<span class="cover-tag">' + escapeHtml((PRODUCT_STATUS[product.status] || {}).text || '') + '</span>'
+                    : '';
+                return '<article class="product-card" onclick="location.href=\'detail.html?id=' + product.id + '\'">'
+                    + coverHtml(product, tag)
+                    + '<div class="product-body">'
+                    + '<div class="product-title">' + escapeHtml(product.title) + '</div>'
+                    + '<div class="row"><span class="price">' + formatMoney(product.price) + '</span></div>'
+                    + '<div class="product-meta"><span class="ellipsis">'
+                    + escapeHtml(product.sellerNickname || '') + '</span>'
+                    + '<span>' + escapeHtml((PRODUCT_STATUS[product.status] || {}).text || '') + '</span>'
+                    + '</div></div></article>';
+            }).join('') + '</div><div class="pagination" id="pager"></div>';
+
+            renderPagination('#pager', data, p => load(p));
+        };
+        load(1);
+    }
+
+    /* ------------------------------ 信用分 ------------------------------ */
+
+    async function renderCredit() {
+        const panel = $('#panel');
+        panel.innerHTML = loadingHtml();
+        const { data } = await UserApi.creditLogs();
+
+        if (!data.length) {
+            panel.innerHTML = '<div class="card">'
+                + emptyHtml('暂无信用分变动记录', '完成一笔交易可获得 +2 信用分') + '</div>';
+            return;
+        }
+
+        panel.innerHTML = '<div class="card">'
+            + '<div class="card-head"><span class="card-title">信用分流水</span>'
+            + '<span class="fs-13 text-3">最近 50 条</span></div>'
+            + data.map(log => {
+                const positive = log.changeScore > 0;
+                return '<div class="order-item" style="align-items:center">'
+                    + '<div style="width:52px;text-align:center;font-size:17px;font-weight:600;color:'
+                    + (positive ? 'var(--primary-dark)' : 'var(--danger)') + '">'
+                    + (positive ? '+' : '') + log.changeScore + '</div>'
+                    + '<div class="order-main">'
+                    + '<div class="fw-500">' + escapeHtml(log.reason) + '</div>'
+                    + '<div class="fs-12 text-3">' + escapeHtml(formatTime(log.createTime))
+                    + (log.orderId ? ' · 订单 #' + log.orderId : '') + '</div>'
+                    + '</div></div>';
+            }).join('')
+            + '</div>';
+    }
+
+    /* 资料更新后刷新导航栏上的昵称 */
+    function renderNavRefresh() {
+        const nav = $('.nav');
+        if (nav) nav.remove();
+        renderNav(navKeyMap[currentTab] || 'products');
+    }
+
+    renderTabs();
+    loadProfileCard();
+    renderPanel();
+</script>
+</body>
+</html>

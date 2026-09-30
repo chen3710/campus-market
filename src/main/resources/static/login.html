@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>登录 · 校园二手交易平台</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .auth-wrap {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 40px 20px;
+            background: linear-gradient(160deg, #eef8f4 0%, #f6f7f9 55%);
+        }
+        .auth-card {
+            width: 100%;
+            max-width: 400px;
+            background: #fff;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            padding: 30px 28px 26px;
+        }
+        .auth-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .auth-title {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -.3px;
+        }
+        .auth-sub {
+            color: var(--text-2);
+            font-size: 13px;
+            margin: 0 0 22px;
+        }
+        .auth-switch {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 13px;
+            color: var(--text-2);
+        }
+        .auth-switch a {
+            color: var(--primary-dark);
+            font-weight: 500;
+        }
+        .demo-box {
+            margin-top: 18px;
+            padding: 12px 14px;
+            background: var(--primary-light);
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            color: var(--primary-dark);
+            line-height: 1.8;
+        }
+        .demo-box b { font-weight: 600; }
+    </style>
+</head>
+<body>
+<div class="auth-wrap">
+    <div class="auth-card">
+        <div class="auth-brand">
+            <span class="brand-mark">校</span>
+            <span class="auth-title">校园二手交易平台</span>
+        </div>
+        <p class="auth-sub" id="subtitle">登录后即可发布闲置、下单和留言</p>
+
+        <!-- 登录表单 -->
+        <form id="loginForm">
+            <div class="field">
+                <label class="label" for="loginUsername">用户名</label>
+                <input class="input" id="loginUsername" autocomplete="username" placeholder="请输入用户名">
+            </div>
+            <div class="field">
+                <label class="label" for="loginPassword">密码</label>
+                <input class="input" id="loginPassword" type="password" autocomplete="current-password" placeholder="请输入密码">
+            </div>
+            <div class="form-error" id="loginError"></div>
+            <button class="btn btn-primary btn-block" type="submit" id="loginBtn">登录</button>
+        </form>
+
+        <!-- 注册表单 -->
+        <form id="registerForm" class="hidden">
+            <div class="field">
+                <label class="label" for="regUsername">用户名<span class="req">*</span></label>
+                <input class="input" id="regUsername" autocomplete="username" placeholder="4-20 位字母、数字或下划线">
+            </div>
+            <div class="field">
+                <label class="label" for="regPassword">密码<span class="req">*</span></label>
+                <input class="input" id="regPassword" type="password" autocomplete="new-password" placeholder="6-32 位">
+            </div>
+            <div class="field">
+                <label class="label" for="regNickname">昵称<span class="req">*</span></label>
+                <input class="input" id="regNickname" placeholder="同学们看到的名字">
+            </div>
+            <div class="field">
+                <label class="label" for="regCampus">校区</label>
+                <input class="input" id="regCampus" placeholder="例如：东校区">
+            </div>
+            <div class="field">
+                <label class="label" for="regPhone">手机号</label>
+                <input class="input" id="regPhone" placeholder="选填，便于买家联系你">
+            </div>
+            <div class="form-error" id="registerError"></div>
+            <button class="btn btn-primary btn-block" type="submit" id="registerBtn">注册并登录</button>
+        </form>
+
+        <div class="auth-switch">
+            <span id="switchText">还没有账号？</span>
+            <a href="javascript:void(0)" id="switchLink">立即注册</a>
+        </div>
+
+        <div class="demo-box">
+            <b>演示账号</b>（密码统一为 <b>123456</b>）<br>
+            学生：alice / bob / carol　　管理员：admin
+        </div>
+    </div>
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/api.js"></script>
+<script>
+    const redirect = queryParam('redirect', 'index.html');
+
+    function showMode(mode) {
+        const isRegister = mode === 'register';
+        $('#loginForm').classList.toggle('hidden', isRegister);
+        $('#registerForm').classList.toggle('hidden', !isRegister);
+        $('#subtitle').textContent = isRegister
+            ? '注册后即可发布闲置、下单和留言'
+            : '登录后即可发布闲置、下单和留言';
+        $('#switchText').textContent = isRegister ? '已经有账号了？' : '还没有账号？';
+        $('#switchLink').textContent = isRegister ? '去登录' : '立即注册';
+        $('#switchLink').dataset.mode = isRegister ? 'login' : 'register';
+        history.replaceState(null, '', isRegister ? '?mode=register' : '?');
+    }
+
+    $('#switchLink').addEventListener('click', () => {
+        showMode($('#switchLink').dataset.mode || 'register');
+    });
+
+    function afterLogin(message) {
+        toast(message, 'success');
+        setTimeout(() => { location.href = redirect; }, 500);
+    }
+
+    $('#loginForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const error = $('#loginError');
+        error.textContent = '';
+
+        const username = $('#loginUsername').value.trim();
+        const password = $('#loginPassword').value;
+        if (!username || !password) {
+            error.textContent = '请填写用户名和密码';
+            return;
+        }
+
+        const btn = $('#loginBtn');
+        btn.disabled = true;
+        btn.textContent = '登录中…';
+        try {
+            const { data, message } = await api.post('/api/auth/login', { username, password });
+            Auth.save(data);
+            afterLogin(message || '登录成功');
+        } catch (e2) {
+            error.textContent = e2.message || '登录失败';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '登录';
+        }
+    });
+
+    $('#registerForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const error = $('#registerError');
+        error.textContent = '';
+
+        const payload = {
+            username: $('#regUsername').value.trim(),
+            password: $('#regPassword').value,
+            nickname: $('#regNickname').value.trim(),
+            campus: $('#regCampus').value.trim(),
+            phone: $('#regPhone').value.trim()
+        };
+
+        if (!payload.username || !payload.password || !payload.nickname) {
+            error.textContent = '用户名、密码、昵称为必填项';
+            return;
+        }
+        if (payload.password.length < 6) {
+            error.textContent = '密码至少 6 位';
+            return;
+        }
+
+        const btn = $('#registerBtn');
+        btn.disabled = true;
+        btn.textContent = '注册中…';
+        try {
+            const { data, message } = await api.post('/api/auth/register', payload);
+            Auth.save(data);
+            afterLogin(message || '注册成功');
+        } catch (e2) {
+            error.textContent = e2.message || '注册失败';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '注册并登录';
+        }
+    });
+
+    /* 已登录用户直接跳走，避免重复登录 */
+    if (Auth.isLogin()) {
+        api.get('/api/auth/me', { silent: true })
+            .then(({ data }) => {
+                Auth.updateUser(data);
+                location.href = redirect;
+            })
+            .catch(() => Auth.clear());
+    }
+
+    showMode(queryParam('mode', 'login'));
+</script>
+</body>
+</html>

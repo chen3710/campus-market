@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campus.market.mapper.ProductMapper">
+
+    <sql id="productColumns">
+        p.id,
+        p.title,
+        p.description,
+        p.price,
+        p.original_price,
+        p.cover,
+        p.condition_level,
+        p.status,
+        p.view_count,
+        p.favorite_count,
+        p.create_time,
+        p.category_id,
+        c.name       AS category_name,
+        p.seller_id,
+        u.nickname   AS seller_nickname,
+        u.avatar     AS seller_avatar,
+        u.campus     AS seller_campus,
+        u.credit_score AS seller_credit_score
+    </sql>
+
+    <sql id="productJoins">
+        FROM product p
+        LEFT JOIN category c ON c.id = p.category_id
+        LEFT JOIN `user` u ON u.id = p.seller_id
+    </sql>
+
+    <select id="selectProductPage" resultType="com.campus.market.vo.ProductVO">
+        SELECT
+        <include refid="productColumns"/>
+        <include refid="productJoins"/>
+        WHERE p.deleted = 0
+        <if test="query.keyword != null and query.keyword != ''">
+            AND (p.title LIKE CONCAT('%', #{query.keyword}, '%')
+            OR p.description LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        <if test="query.categoryId != null">
+            AND p.category_id = #{query.categoryId}
+        </if>
+        <if test="query.sellerId != null">
+            AND p.seller_id = #{query.sellerId}
+        </if>
+        <if test="query.status != null and query.status != ''">
+            AND p.status = #{query.status}
+        </if>
+        <if test="query.minPrice != null">
+            AND p.price &gt;= #{query.minPrice}
+        </if>
+        <if test="query.maxPrice != null">
+            AND p.price &lt;= #{query.maxPrice}
+        </if>
+        <!--
+            排序字段用 choose/when 白名单枚举，绝不能把前端传来的字符串直接拼进 ORDER BY，
+            否则就是典型的 SQL 注入入口（ORDER BY 无法用 #{} 预编译占位）。
+        -->
+        ORDER BY
+        <choose>
+            <when test='query.sort == "priceAsc"'>p.price ASC, p.id DESC</when>
+            <when test='query.sort == "priceDesc"'>p.price DESC, p.id DESC</when>
+            <when test='query.sort == "hot"'>p.view_count DESC, p.id DESC</when>
+            <otherwise>p.create_time DESC, p.id DESC</otherwise>
+        </choose>
+    </select>
+
+    <select id="selectProductDetail" resultType="com.campus.market.vo.ProductVO">
+        SELECT
+        <include refid="productColumns"/>
+        <include refid="productJoins"/>
+        WHERE p.id = #{id} AND p.deleted = 0
+    </select>
+
+    <select id="selectProductByIds" resultType="com.campus.market.vo.ProductVO">
+        SELECT
+        <include refid="productColumns"/>
+        <include refid="productJoins"/>
+        WHERE p.deleted = 0 AND p.id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>

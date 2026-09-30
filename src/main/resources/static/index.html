@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>校园二手交易平台 · 逛市场</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main class="container">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">校园闲置市场</h1>
+            <p class="page-sub">同校交易，当面验货，省去快递费和扯皮</p>
+        </div>
+        <a class="btn btn-primary" href="publish.html">发布闲置</a>
+    </div>
+
+    <div class="search-box" style="margin-bottom:14px">
+        <input id="keyword" class="input" placeholder="搜索教材、数码、代步工具…" autocomplete="off">
+    </div>
+
+    <div class="category-bar" id="categories"></div>
+
+    <div class="row-between" style="margin-bottom:16px;flex-wrap:wrap;gap:12px">
+        <div class="row" style="flex-wrap:wrap">
+            <select id="sort" class="select" style="width:148px;height:36px">
+                <option value="">最新发布</option>
+                <option value="priceAsc">价格从低到高</option>
+                <option value="priceDesc">价格从高到低</option>
+                <option value="hot">最多浏览</option>
+            </select>
+            <input id="minPrice" class="input" style="width:88px;height:36px" placeholder="最低价" inputmode="decimal">
+            <span class="text-3">—</span>
+            <input id="maxPrice" class="input" style="width:88px;height:36px" placeholder="最高价" inputmode="decimal">
+            <button class="btn btn-sm" id="applyFilter">筛选</button>
+            <button class="btn btn-sm" id="resetFilter">重置</button>
+        </div>
+        <div class="text-3 fs-13" id="resultCount"></div>
+    </div>
+
+    <div class="grid" id="list"></div>
+    <div class="pagination" id="pagination"></div>
+</main>
+
+<script src="js/common.js"></script>
+<script src="js/api.js"></script>
+<script>
+    const state = {
+        page: 1,
+        size: 12,
+        keyword: '',
+        categoryId: '',
+        sort: '',
+        minPrice: '',
+        maxPrice: ''
+    };
+
+    renderNav('index');
+
+    function collectParams() {
+        const params = { page: state.page, size: state.size };
+        ['keyword', 'categoryId', 'sort', 'minPrice', 'maxPrice'].forEach(key => {
+            if (state[key] !== '' && state[key] !== null) params[key] = state[key];
+        });
+        return params;
+    }
+
+    async function loadCategories() {
+        try {
+            const { data } = await CategoryApi.list();
+            const bar = $('#categories');
+            bar.innerHTML = '<button class="category-pill active" data-id="">全部</button>'
+                + data.map(c => '<button class="category-pill" data-id="' + c.id + '">'
+                    + escapeHtml(c.name) + '</button>').join('');
+
+            $$('.category-pill', bar).forEach(pill => {
+                pill.addEventListener('click', () => {
+                    $$('.category-pill', bar).forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    state.categoryId = pill.dataset.id;
+                    state.page = 1;
+                    load();
+                });
+            });
+        } catch (e) {
+            /* 分类加载失败不阻塞商品列表 */
+        }
+    }
+
+    function cardHtml(product) {
+        const tag = product.status !== 'ON_SALE'
+            ? '<span class="cover-tag">' + escapeHtml((PRODUCT_STATUS[product.status] || {}).text || '') + '</span>'
+            : '';
+        const originPrice = product.originalPrice
+            ? '<span class="price-origin">¥' + formatMoney(product.originalPrice) + '</span>'
+            : '';
+
+        return '<article class="product-card" data-id="' + product.id + '">'
+            + coverHtml(product, tag)
+            + '<div class="product-body">'
+            + '<div class="product-title">' + escapeHtml(product.title) + '</div>'
+            + '<div class="row"><span class="price">' + formatMoney(product.price) + '</span>' + originPrice + '</div>'
+            + '<div class="product-meta">'
+            + '<span class="ellipsis">' + escapeHtml(product.sellerNickname || '匿名同学')
+            + (product.sellerCampus ? ' · ' + escapeHtml(product.sellerCampus) : '') + '</span>'
+            + '<span>' + (product.viewCount || 0) + ' 浏览</span>'
+            + '</div></div></article>';
+    }
+
+    function renderList(pageResult) {
+        const list = $('#list');
+        $('#resultCount').textContent = '共 ' + pageResult.total + ' 件闲置';
+
+        if (!pageResult.records || pageResult.records.length === 0) {
+            list.innerHTML = emptyHtml('没有找到相关商品', '换个关键词或分类再试试');
+            return;
+        }
+
+        list.innerHTML = pageResult.records.map(cardHtml).join('');
+        $$('.product-card', list).forEach(card => {
+            card.addEventListener('click', () => {
+                location.href = 'detail.html?id=' + card.dataset.id;
+            });
+        });
+    }
+
+    async function load() {
+        const list = $('#list');
+        list.innerHTML = loadingHtml();
+        try {
+            const { data } = await ProductApi.page(collectParams());
+            renderList(data);
+            renderPagination('#pagination', data, page => {
+                state.page = page;
+                load();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        } catch (e) {
+            list.innerHTML = emptyHtml('加载失败', '请确认后端服务已启动（默认 http://localhost:8080）');
+        }
+    }
+
+    /* ------------------------------ 事件绑定 ------------------------------ */
+
+    let searchTimer = null;
+    $('#keyword').addEventListener('input', e => {
+        clearTimeout(searchTimer);
+        const value = e.target.value.trim();
+        searchTimer = setTimeout(() => {
+            state.keyword = value;
+            state.page = 1;
+            load();
+        }, 350);
+    });
+
+    $('#sort').addEventListener('change', e => {
+        state.sort = e.target.value;
+        state.page = 1;
+        load();
+    });
+
+    $('#applyFilter').addEventListener('click', () => {
+        state.minPrice = $('#minPrice').value.trim();
+        state.maxPrice = $('#maxPrice').value.trim();
+        state.page = 1;
+        load();
+    });
+
+    $('#resetFilter').addEventListener('click', () => {
+        state.page = 1;
+        state.keyword = '';
+        state.categoryId = '';
+        state.sort = '';
+        state.minPrice = '';
+        state.maxPrice = '';
+        $('#keyword').value = '';
+        $('#minPrice').value = '';
+        $('#maxPrice').value = '';
+        $('#sort').value = '';
+        $$('.category-pill').forEach((p, i) => p.classList.toggle('active', i === 0));
+        load();
+    });
+
+    /* 支持回车快速筛选 */
+    ['minPrice', 'maxPrice'].forEach(id => {
+        $('#' + id).addEventListener('keydown', e => {
+            if (e.key === 'Enter') $('#applyFilter').click();
+        });
+    });
+
+    loadCategories();
+    load();
+</script>
+</body>
+</html>

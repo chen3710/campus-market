@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>发布闲置 · 校园二手交易平台</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .form-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 330px;
+            gap: 22px;
+            align-items: start;
+        }
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+            gap: 10px;
+        }
+        .image-item {
+            position: relative;
+            aspect-ratio: 1;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: #f0f2f4;
+        }
+        .image-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .image-remove {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 21px;
+            height: 21px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(0, 0, 0, .6);
+            color: #fff;
+            font-size: 13px;
+            line-height: 1;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+        }
+        .image-add {
+            aspect-ratio: 1;
+            border: 1px dashed var(--border-strong);
+            border-radius: var(--radius-sm);
+            display: grid;
+            place-items: center;
+            cursor: pointer;
+            color: var(--text-3);
+            font-size: 13px;
+            text-align: center;
+            line-height: 1.5;
+            background: #fafbfc;
+            transition: border-color .15s, color .15s;
+        }
+        .image-add:hover {
+            border-color: var(--primary);
+            color: var(--primary-dark);
+        }
+        @media (max-width: 900px) {
+            .form-layout { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<main class="container">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title" id="pageTitle">发布闲置</h1>
+            <p class="page-sub">描述越详细，成交越快。建议写清成色、入手时间和附件</p>
+        </div>
+    </div>
+
+    <div class="form-layout">
+        <div class="card card-pad">
+            <form id="productForm">
+                <div class="field">
+                    <label class="label" for="title">商品标题<span class="req">*</span></label>
+                    <input class="input" id="title" maxlength="50" placeholder="例如：高等数学 同济第七版 上下册">
+                </div>
+
+                <div class="row" style="gap:14px;align-items:flex-start">
+                    <div class="field" style="flex:1">
+                        <label class="label" for="categoryId">分类<span class="req">*</span></label>
+                        <select class="select" id="categoryId"></select>
+                    </div>
+                    <div class="field" style="flex:1">
+                        <label class="label" for="conditionLevel">成色</label>
+                        <select class="select" id="conditionLevel">
+                            <option>全新</option>
+                            <option>九五新</option>
+                            <option selected>九成新</option>
+                            <option>八成新</option>
+                            <option>七成新及以下</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row" style="gap:14px;align-items:flex-start">
+                    <div class="field" style="flex:1">
+                        <label class="label" for="price">售价（元）<span class="req">*</span></label>
+                        <input class="input" id="price" inputmode="decimal" placeholder="0.00">
+                    </div>
+                    <div class="field" style="flex:1">
+                        <label class="label" for="originalPrice">原价（元）</label>
+                        <input class="input" id="originalPrice" inputmode="decimal" placeholder="选填，用于显示折扣">
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label class="label" for="description">详细描述</label>
+                    <textarea class="textarea" id="description" maxlength="2000"
+                        placeholder="入手时间、使用频率、有无磕碰、附赠配件、交易地点…"></textarea>
+                    <span class="hint" id="descCount">0 / 2000</span>
+                </div>
+
+                <div class="field">
+                    <label class="label">商品图片</label>
+                    <div class="image-grid" id="imageGrid">
+                        <label class="image-add" for="fileInput" id="imageAdd">
+                            <span>+ 上传图片<br><span class="fs-12">最多 4 张</span></span>
+                        </label>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*" multiple class="hidden">
+                    <span class="hint">支持 jpg / png / gif / webp，单张不超过 5MB</span>
+                </div>
+
+                <div class="form-error" id="formError"></div>
+
+                <div class="row mt-16">
+                    <button class="btn btn-primary" type="submit" id="submitBtn">发布</button>
+                    <button class="btn" type="button" id="cancelBtn">取消</button>
+                </div>
+            </form>
+        </div>
+
+        <aside class="stack">
+            <div class="card card-pad">
+                <div class="card-title" style="margin-bottom:12px">发布小贴士</div>
+                <div class="fs-13 text-2" style="line-height:2">
+                    · 标题写清「名称 + 版本/型号」，更容易被搜到<br>
+                    · 价格参考二手平台均价，标太高没人问<br>
+                    · 图片放实拍图，别用官方宣传图<br>
+                    · 写清能不能小刀、能不能送货
+                </div>
+            </div>
+            <div class="card card-pad">
+                <div class="card-title" style="margin-bottom:12px">状态说明</div>
+                <div class="fs-13 text-2" style="line-height:2">
+                    发布后商品为 <span class="badge badge-green">在售</span><br>
+                    被下单后自动变为 <span class="badge badge-amber">已被下单</span>，此时不能编辑<br>
+                    交易完成后变为 <span class="badge badge-gray">已售出</span>
+                </div>
+            </div>
+        </aside>
+    </div>
+</main>
+
+<script src="js/common.js"></script>
+<script src="js/api.js"></script>
+<script>
+    const editId = queryParam('id');
+    const isEdit = !!editId;
+    let images = [];
+    let categories = [];
+
+    renderNav('publish');
+    if (!requireLogin()) { /* 已跳转登录页 */ }
+
+    if (isEdit) {
+        $('#pageTitle').textContent = '编辑商品';
+        $('#submitBtn').textContent = '保存修改';
+        document.title = '编辑商品 · 校园二手交易平台';
+    }
+
+    /* ------------------------------ 图片 ------------------------------ */
+
+    function renderImages() {
+        const grid = $('#imageGrid');
+        const items = images.map((url, index) =>
+            '<div class="image-item"><img src="' + escapeHtml(url) + '" alt="">'
+            + '<button type="button" class="image-remove" data-index="' + index + '">×</button></div>'
+        ).join('');
+
+        const addButton = images.length >= 4 ? '' :
+            '<label class="image-add" for="fileInput" id="imageAdd">'
+            + '<span>+ 上传图片<br><span class="fs-12">' + (4 - images.length) + ' 张可添加</span></span></label>';
+
+        grid.innerHTML = items + addButton;
+
+        $$('.image-remove', grid).forEach(btn => {
+            btn.addEventListener('click', () => {
+                images.splice(Number(btn.dataset.index), 1);
+                renderImages();
+            });
+        });
+    }
+
+    $('#fileInput').addEventListener('change', async e => {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+
+        const remaining = 4 - images.length;
+        const picked = files.slice(0, remaining);
+        if (files.length > remaining) {
+            toast('最多上传 4 张，已自动截取前 ' + remaining + ' 张', 'error');
+        }
+
+        for (const file of picked) {
+            if (file.size > 5 * 1024 * 1024) {
+                toast('「' + file.name + '」超过 5MB，已跳过', 'error');
+                continue;
+            }
+            try {
+                const { data } = await api.upload(file);
+                images.push(data);
+                renderImages();
+            } catch (err) {
+                /* 上传失败已提示 */
+            }
+        }
+        e.target.value = '';
+    });
+
+    /* ------------------------------ 表单 ------------------------------ */
+
+    async function loadCategories() {
+        const { data } = await CategoryApi.list();
+        categories = data;
+        $('#categoryId').innerHTML = data.map(c =>
+            '<option value="' + c.id + '">' + escapeHtml(c.name) + '</option>').join('');
+    }
+
+    async function loadProduct() {
+        const { data } = await ProductApi.detail(editId);
+        $('#title').value = data.title;
+        $('#price').value = data.price;
+        $('#originalPrice').value = data.originalPrice || '';
+        $('#description').value = data.description || '';
+        $('#categoryId').value = data.categoryId;
+        $('#conditionLevel').value = data.conditionLevel || '九成新';
+        images = data.images && data.images.length ? data.images.slice() : (data.cover ? [data.cover] : []);
+        renderImages();
+        updateDescCount();
+
+        if (data.status !== 'ON_SALE' && data.status !== 'OFF_SHELF') {
+            $('#formError').textContent = '该商品当前状态为「'
+                + ((PRODUCT_STATUS[data.status] || {}).text || data.status) + '」，无法编辑';
+            $('#submitBtn').disabled = true;
+        }
+    }
+
+    function updateDescCount() {
+        $('#descCount').textContent = $('#description').value.length + ' / 2000';
+    }
+
+    $('#description').addEventListener('input', updateDescCount);
+
+    $('#cancelBtn').addEventListener('click', () => history.back());
+
+    $('#productForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const error = $('#formError');
+        error.textContent = '';
+
+        const payload = {
+            title: $('#title').value.trim(),
+            description: $('#description').value.trim(),
+            price: $('#price').value.trim(),
+            originalPrice: $('#originalPrice').value.trim() || null,
+            categoryId: Number($('#categoryId').value) || null,
+            conditionLevel: $('#conditionLevel').value,
+            cover: images[0] || null,
+            images: images
+        };
+
+        if (!payload.title) { error.textContent = '请填写商品标题'; return; }
+        if (!payload.price || Number(payload.price) <= 0) { error.textContent = '请填写大于 0 的售价'; return; }
+        if (!payload.categoryId) { error.textContent = '请选择商品分类'; return; }
+        if (payload.originalPrice && Number(payload.originalPrice) < Number(payload.price)) {
+            error.textContent = '原价不应低于售价，请检查';
+            return;
+        }
+
+        const btn = $('#submitBtn');
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = '提交中…';
+        try {
+            const { message } = isEdit
+                ? await ProductApi.update(editId, payload)
+                : await ProductApi.create(payload);
+            toast(message || '发布成功', 'success');
+            setTimeout(() => {
+                location.href = isEdit ? 'center.html?tab=products' : 'center.html?tab=products';
+            }, 650);
+        } catch (err) {
+            error.textContent = err.message || '提交失败';
+            btn.disabled = false;
+            btn.textContent = original;
+        }
+    });
+
+    (async function init() {
+        try {
+            await loadCategories();
+            if (isEdit) await loadProduct();
+            renderImages();
+        } catch (e) {
+            $('#formError').textContent = '初始化失败，请刷新重试';
+        }
+    })();
+</script>
+</body>
+</html>

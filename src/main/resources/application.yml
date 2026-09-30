@@ -1,0 +1,67 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+
+spring:
+  application:
+    name: campus-market
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/campus_market?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:123456}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+      pool-name: CampusMarketPool
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    default-property-inclusion: non_null
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 20MB
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+app:
+  jwt:
+    secret: campus-market-jwt-secret-key-change-me-in-production-2026-abc
+    expire-minutes: 10080
+    header: Authorization
+    prefix: "Bearer "
+  upload:
+    dir: ./uploads
+    url-prefix: /uploads
+  demo-data:
+    enabled: true
+  order:
+    # 订单超时自动取消：把一直卡在「待卖家确认 / 待面交」的僵尸订单清理掉，
+    # 否则商品会永远停在 LOCKED，谁都买不了。
+    enabled: true
+    # 在该状态停留超过多少分钟算超时（CREATED 从下单时间算，CONFIRMED 从确认时间算）
+    timeout-minutes: 30
+    # 扫描间隔与首次延迟。想现场演示效果，可以把 timeout-minutes 设为 0、
+    # scan-interval-ms 设为 5000，一分钟内就能看到订单被自动取消。
+    scan-interval-ms: 60000
+    initial-delay-ms: 30000
+    # 单批上限，避免一次把太多行锁住
+    batch-size: 100
+
+logging:
+  level:
+    com.campus.market: debug
+    org.springframework.web: info

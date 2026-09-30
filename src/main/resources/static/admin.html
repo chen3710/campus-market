@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>后台管理 · 校园二手交易平台</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<main class="container">
+    <div class="page-head">
+        <div>
+            <h1 class="page-title">用户管理</h1>
+            <p class="page-sub">该页面仅管理员可见，用于封禁违规账号</p>
+        </div>
+        <div class="search-box" style="max-width:280px">
+            <input class="input" id="keyword" placeholder="搜索用户名或昵称">
+        </div>
+    </div>
+
+    <div id="panel"></div>
+</main>
+
+<script src="js/common.js"></script>
+<script src="js/api.js"></script>
+<script>
+    const me = Auth.user();
+    renderNav('admin');
+
+    if (!Auth.isLogin()) {
+        location.href = 'login.html?redirect=' + encodeURIComponent('admin.html');
+    } else if (!me || me.role !== 'ADMIN') {
+        $('#panel').innerHTML = '<div class="card">'
+            + emptyHtml('没有访问权限', '该页面仅管理员可访问') + '</div>';
+    } else {
+        start();
+    }
+
+    function start() {
+        let currentPage = 1;
+        let currentKeyword = '';
+
+        async function load(page) {
+            currentPage = page || 1;
+            const panel = $('#panel');
+            panel.innerHTML = loadingHtml();
+
+            try {
+                const { data } = await AdminApi.users(currentPage, 10, currentKeyword);
+                if (!data.records.length) {
+                    panel.innerHTML = '<div class="card">' + emptyHtml('没有匹配的用户') + '</div>';
+                    return;
+                }
+
+                panel.innerHTML = '<div class="card">'
+                    + '<div class="card-head"><span class="card-title">共 ' + data.total + ' 位用户</span></div>'
+                    + data.records.map(userRow).join('')
+                    + '</div><div class="pagination" id="pager"></div>';
+
+                renderPagination('#pager', data, p => load(p));
+
+                $$('[data-user-action]').forEach(btn => {
+                    btn.addEventListener('click', () => toggleStatus(
+                        btn.dataset.id, Number(btn.dataset.next), btn.dataset.name));
+                });
+            } catch (e) {
+                panel.innerHTML = '<div class="card">' + emptyHtml('加载失败', e.message || '') + '</div>';
+            }
+        }
+
+        function userRow(user) {
+            const avatar = user.avatar
+                ? '<img src="' + escapeHtml(user.avatar) + '" alt="">'
+                : escapeHtml(firstChar(user.nickname));
+
+            const isAdmin = user.role === 'ADMIN';
+            const banned = user.status === 0;
+
+            const actionBtn = isAdmin
+                ? '<span class="fs-12 text-3">管理员账号</span>'
+                : '<button class="btn btn-sm' + (banned ? '' : ' btn-danger')
+                    + '" data-user-action="1" data-id="' + user.id + '" data-next="' + (banned ? 1 : 0)
+                    + '" data-name="' + escapeHtml(user.nickname) + '">'
+                    + (banned ? '解封' : '封禁') + '</button>';
+
+            return '<div class="order-item" style="align-items:center">'
+                + '<span class="avatar avatar-lg">' + avatar + '</span>'
+                + '<div class="order-main">'
+                + '<div class="row" style="gap:8px;flex-wrap:wrap">'
+                + '<span class="fw-500">' + escapeHtml(user.nickname) + '</span>'
+                + (isAdmin ? '<span class="badge badge-blue">管理员</span>' : '')
+                + (banned ? '<span class="badge badge-red">已封禁</span>' : '<span class="badge badge-green">正常</span>')
+                + '</div>'
+                + '<div class="fs-12 text-3">@' + escapeHtml(user.username)
+                + (user.campus ? ' · ' + escapeHtml(user.campus) : '')
+                + ' · 信用分 ' + (user.creditScore == null ? '—' : user.creditScore)
+                + ' · 注册于 ' + escapeHtml(formatTime(user.createTime)) + '</div>'
+                + '</div>'
+                + '<div class="order-actions">' + actionBtn + '</div>'
+                + '</div>';
+        }
+
+        async function toggleStatus(id, nextStatus, name) {
+            const text = nextStatus === 0 ? '封禁' : '解封';
+            confirmDialog('确认' + text + '账号',
+                '即将' + text + '用户「' + name + '」的账号，确定继续吗？',
+                async () => {
+                    const { message } = await AdminApi.updateStatus(id, nextStatus);
+                    toast(message, 'success');
+                    load(currentPage);
+                },
+                '确认' + text);
+        }
+
+        let timer = null;
+        $('#keyword').addEventListener('input', e => {
+            clearTimeout(timer);
+            const value = e.target.value.trim();
+            timer = setTimeout(() => {
+                currentKeyword = value;
+                load(1);
+            }, 350);
+        });
+
+        load(1);
+    }
+</script>
+</body>
+</html>
